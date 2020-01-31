@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns:os="http://www.mulesoft.org/schema/mule/os"
+	xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/os http://www.mulesoft.org/schema/mule/os/current/mule-os.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd">
+	<flow name="folding-at-home-download-txt-http" doc:id="1e786712-dc0c-4798-88b1-2ba849538014" >
+		<http:listener doc:name="GET /download-txt-files" doc:id="f68cf136-e61b-44fd-b8b8-70dccb66a8d7" config-ref="HTTP_Listener_config" path="${folding-at-home.http.download-txt-url}"/>
+		<flow-ref doc:name="folding-at-home-download-txt-main" doc:id="03cd2cec-ac6c-491d-9dbc-cf376cb38d9e" name="folding-at-home-download-txt-main"/>
+	</flow>
+	<flow name="folding-at-home-download-txt-scheduler" doc:id="dfd911a5-4ca6-4020-b3d5-726cf453c51a" >
+		<scheduler doc:name="60 min" doc:id="d68b8282-4c18-41de-9181-6df1c902f0fe" >
+			<scheduling-strategy >
+				<fixed-frequency timeUnit="MINUTES" frequency="${scheduler.timer}"/>
+			</scheduling-strategy>
+		</scheduler>
+		<flow-ref doc:name="folding-at-home-download-txt-main" doc:id="e9f8b503-1d08-4b82-ac7f-e285d6361e21" name="folding-at-home-download-txt-main"/>
+	</flow>
+	<flow name="folding-at-home-download-txt-main" doc:id="2def6444-8a57-4209-a542-96c444b48929" >
+		<flow-ref doc:name="folding-at-home-download-teams-txt-main" doc:id="826714fb-89cb-4cb6-8bd7-c451305dcdbf" name="folding-at-home-download-teams-txt-main" />
+		<logger level="INFO" doc:name="Logger" doc:id="93251a71-1c9c-4745-996b-0bbc311e1edb" />
+		<flow-ref doc:name="folding-at-home-download-donors-txt-main" doc:id="e1393a41-8328-4279-8248-02e5d68e12b9" name="folding-at-home-download-donors-txt-main" />
+		<logger level="INFO" doc:name="Logger" doc:id="476afd7b-3637-42e3-a179-e0c001b0d449" message='"Its OK"'/>
+	</flow>
+</mule>

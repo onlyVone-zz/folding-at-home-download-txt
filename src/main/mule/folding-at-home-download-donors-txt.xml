@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd">
+	<flow name="folding-at-home-download-donors-txt-main" doc:id="5d7896b5-3b40-45dc-aeac-75cef4787f0d" >
+		<http:listener doc:name="GET /inner-donors" doc:id="7bab70d4-c904-4aaf-9771-f9256c49867d" config-ref="HTTP_Listener_config" path="${folding-at-home.http-request.inner.donors-listener}"/>
+		<logger level="INFO" doc:name="Logger" doc:id="b898ca86-2bd6-43b0-a3ae-16cbc820fddc" />
+	</flow>
+</mule>
