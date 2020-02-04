@@ -1,11 +1,116 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<mule xmlns:db="http://www.mulesoft.org/schema/mule/db" xmlns:http="http://www.mulesoft.org/schema/mule/http"
-	xmlns="http://www.mulesoft.org/schema/mule/core"
-	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+<mule xmlns:os="http://www.mulesoft.org/schema/mule/os" xmlns:batch="http://www.mulesoft.org/schema/mule/batch"
+	xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:db="http://www.mulesoft.org/schema/mule/db" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
 http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
-http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd">
+http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/batch http://www.mulesoft.org/schema/mule/batch/current/mule-batch.xsd
+http://www.mulesoft.org/schema/mule/os http://www.mulesoft.org/schema/mule/os/current/mule-os.xsd">
 	<flow name="folding-at-home-download-teams-txt-main" doc:id="b76310c0-765f-46cb-81f4-34ee251bf3b0" >
-		<logger level="INFO" doc:name="Logger" doc:id="a7788928-d0e8-467d-8698-fe74afa86069" />
+		<flow-ref doc:name="get-teams-txt-file" doc:id="80364b25-ec76-4f17-b8bf-8e4414df047c" name="get-teams-txt-file"/>
+		<flow-ref doc:name="store-date-from-header-of-the-file" doc:id="995822fd-5c6e-4ab0-8f85-b03b915e3d87" name="store-date-from-header-of-the-file"/>
+		<flow-ref doc:name="get-teams-fulldate-from-object-store" doc:id="cfba2481-60aa-415e-a4db-faac69caf7e2" name="get-teams-fulldate-from-object-store"/>
+		<choice doc:name="Choice" doc:id="b216cdb7-a3fa-41b3-a8ae-6c1a14d0f1c1" >
+			<when expression="#[vars.fulldate[0].date == vars.teams_fulldate]">
+				<logger level="INFO" doc:name="All teams are already up-to-date" doc:id="3744fde7-bdd2-48e8-9515-79bc77af5f27" message='#["All teams are already up-to-date"]'/>
+			</when>
+			<otherwise >
+				<flow-ref doc:name="processing-the-file" doc:id="febca4ff-146e-413a-b798-ce09575314b8" name="processing-the-file" />
+			</otherwise>
+		</choice>
+	</flow>
+	<flow name="get-teams-txt-file" doc:id="7e925d86-2120-4760-b22a-a92c0cdef3d8" >
+		<http:request method="GET" doc:name="GET /daily_team_summary.txt" doc:id="d530471c-4151-41cb-970e-bdbfeed11631" config-ref="HTTP_Request_configuration_FoldingAtHome" path="${folding-at-home.http-request.teams-txt-download-endpoint}" outputMimeType='application/csv; bodystartlinenumber=2; headerlinenumber=1; header=false; separator="&#009;"; escape=""' />
+	</flow>
+	<flow name="processing-the-file" doc:id="90f50054-ec5d-4b43-947d-4a08e446a2b9">
+		<flow-ref doc:name="store-teams-fulldate-to-object-store" doc:id="2eacd848-72f3-45a2-8969-d22ab9959db1" name="store-teams-fulldate-to-object-store"/>
+		<flow-ref doc:name="remove-first-to-lines" doc:id="862d5906-b802-4133-8c5a-5e64442bb3d8" name="remove-first-to-lines" />
+		<flow-ref doc:name="CSV-to-JAVA-ArrayList" doc:id="1363f464-37a9-4f8b-b73a-3c8d8052ec91" name="CSV-to-JAVA-ArrayList" />
+		<flow-ref doc:name="batch-processing-the-file" doc:id="0fe397da-2cea-4eea-bbcc-aa8d2cf20df2" name="batch-processing-the-file" />
+	</flow>
+	<flow name="batch-processing-the-file" doc:id="d6c48493-62b4-43dd-b88b-02e58fd5253f" >
+		<batch:job jobName="write-into-database" doc:id="1d7fa3ea-dabb-40c9-aa08-3efafaf1e5b3" blockSize="500" maxFailedRecords="-1">
+			<batch:process-records >
+				<batch:step name="Batch_Step" doc:id="3b94f26e-c9d4-4cfd-bc50-28894928ee11" >
+					<ee:transform doc:name="Transform Message" doc:id="e7281b5d-f134-4f00-b5d1-1a82433981eb" >
+						<ee:message >
+							<ee:set-payload ><![CDATA[%dw 2.0
+output application/java
+---
+{
+  teamParam: payload.team as Number,
+  teamnameParam: payload.teamname,
+  scoreParam: payload.score as Number default 0,
+  wuParam: payload.wu as Number default 0,
+  rankParam: payload.rank as Number
+}]]></ee:set-payload>
+						</ee:message>
+					</ee:transform>
+					<batch:aggregator doc:name="Batch Aggregator" doc:id="3e221ea9-4e82-4911-b6c2-09f2563bed44" size="500">
+						<db:bulk-insert doc:name="Bulk insert" doc:id="8ca6b14a-75b1-47d7-b50d-e65fb4d22024" config-ref="Database_Config_MySQL">
+							<db:sql>insert into teams(`id`, `name`, `score`, `wu`, `rank`) 
+values 
+	(:teamParam, :teamnameParam, :scoreParam, :wuParam, :rankParam)
+on duplicate key update `name`=:teamnameParam, `score`=:scoreParam, `wu`=:wuParam, `rank`=:rankParam</db:sql>
+						</db:bulk-insert>
+					</batch:aggregator>
+				</batch:step>
+			</batch:process-records>
+			<batch:on-complete >
+				<logger level="INFO" doc:name="Logger" doc:id="bad0c710-018f-4da6-b019-43046a785cc0" />
+			</batch:on-complete>
+		</batch:job>
+	</flow>
+	<flow name="store-date-from-header-of-the-file" doc:id="5fcbcd40-da64-4b91-b0c4-38be93f53e69" >
+		<ee:transform doc:name="vars.fulldate" doc:id="40fddff2-179f-4912-aa4f-1c03614444ab">
+			<ee:message>
+			</ee:message>
+			<ee:variables>
+				<ee:set-variable variableName="fulldate" ><![CDATA[%dw 2.0
+output application/json
+---
+payload[0] pluck (value, key, index) -> {
+  "date": value
+}]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+	</flow>
+	<flow name="remove-first-to-lines" doc:id="5b2ff3a2-e319-4178-bdb2-612a6b2c8051" >
+		<ee:transform doc:name="Remove first two lines" doc:id="329a1a77-bde5-41c4-804f-0622a14cc146">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/csv
+---
+payload filter $$ > 1]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</flow>
+	<flow name="CSV-to-JAVA-ArrayList" doc:id="7d215ad9-67e7-4306-9177-fb024132dae7" >
+		<ee:transform doc:name="CSV to Java ArrayList" doc:id="e60bc82d-8acc-43a0-abd5-d77b80c22b73">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/java
+---
+payload map {
+  team: $.column_0,
+  teamname: $.column_1,
+  score: $.column_2,
+  wu: $.column_3,
+  rank: $$ + 1
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</flow>
+	<flow name="get-teams-fulldate-from-object-store" doc:id="0e01302f-d235-4142-bb28-703da431c463" >
+		<os:retrieve doc:name="teams_fulldate" doc:id="366dbdc8-9f89-480a-b5bf-1f7b8b2ef55c" key="teams_fulldate" target="teams_fulldate" objectStore="Object_store">
+			<os:default-value ><![CDATA[-1]]></os:default-value>
+		</os:retrieve>
+	</flow>
+	<flow name="store-teams-fulldate-to-object-store" doc:id="2594bc8f-8056-49dd-9351-e884b57b5c59" >
+		<os:store doc:name="teams_fulldate" doc:id="8bbcc989-a3e8-436e-a27d-3acb40136cc8" key="teams_fulldate" objectStore="Object_store">
+			<os:value ><![CDATA[#[vars.fulldate[0].date]]]></os:value>
+		</os:store>
 	</flow>
 </mule>
