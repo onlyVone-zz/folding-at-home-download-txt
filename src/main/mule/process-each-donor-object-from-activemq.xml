@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:db="http://www.mulesoft.org/schema/mule/db"
+	xmlns:batch="http://www.mulesoft.org/schema/mule/batch" xmlns:jms="http://www.mulesoft.org/schema/mule/jms"
+	xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="
+http://www.mulesoft.org/schema/mule/jms http://www.mulesoft.org/schema/mule/jms/current/mule-jms.xsd http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/batch http://www.mulesoft.org/schema/mule/batch/current/mule-batch.xsd
+http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd">
+	<flow name="process-every-donor-java-object-and-store-it-into-db" doc:id="fb16d793-7d6c-467c-9507-7462bfb244a8" >
+		<jms:listener doc:name="donors Queue" doc:id="b330dd2b-cbc0-48a8-b15a-34f8bac9d19a" config-ref="JMS_Config" destination="donors" numberOfConsumers="8">
+			<jms:consumer-type >
+				<jms:queue-consumer />
+			</jms:consumer-type>
+		</jms:listener>
+		<flow-ref doc:name="process-donors-objects-into-batch" doc:id="6042f4f2-b50b-47a6-b1bb-c4c34f22bc1c" name="process-donors-objects-into-batch"/>
+	
+</flow>
+	<flow name="process-donors-objects-into-batch" doc:id="342c5cd8-4d2f-42be-a83f-b588ed8d2f25" >
+		<batch:job jobName="process-each-donor" doc:id="15f1222c-502e-4e6d-b014-e06e12d35cd1" blockSize="500">
+			<batch:process-records >
+				<batch:step name="Batch_Step" doc:id="407cc08b-c8b8-4c52-869a-661d4eda979b" >
+					<batch:aggregator doc:name="Batch Aggregator" doc:id="05725e6a-a356-46f8-bd7f-12b8d4d7dd12" size="500">
+						<db:bulk-insert doc:name="Bulk insert" doc:id="268a496a-9897-45c3-b302-77b073e60b48" config-ref="Database_Config_MySQL">
+							<db:sql >insert into donors(`name`, `score`, `wu`, `rank`) 
+values 
+	(:name, :score, :wu, :rank)
+on duplicate key update `score`=:score, `wu`=:wu, `rank`=:rank</db:sql>
+						</db:bulk-insert>
+					</batch:aggregator>
+				</batch:step>
+			</batch:process-records>
+		</batch:job>
+	</flow>
+</mule>

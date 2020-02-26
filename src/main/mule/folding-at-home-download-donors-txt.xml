@@ -1,11 +1,57 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<mule xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core"
-	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
-	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
-http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd">
+<mule xmlns:jms="http://www.mulesoft.org/schema/mule/jms" xmlns:process-huge-file="http://www.mulesoft.org/schema/mule/process-huge-file"
+	xmlns:os="http://www.mulesoft.org/schema/mule/os"
+	xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/os http://www.mulesoft.org/schema/mule/os/current/mule-os.xsd
+http://www.mulesoft.org/schema/mule/process-huge-file http://www.mulesoft.org/schema/mule/process-huge-file/current/mule-process-huge-file.xsd
+http://www.mulesoft.org/schema/mule/jms http://www.mulesoft.org/schema/mule/jms/current/mule-jms.xsd">
 	<flow name="folding-at-home-download-donors-txt-main" doc:id="5d7896b5-3b40-45dc-aeac-75cef4787f0d" >
 		<http:listener doc:name="GET /inner-donors" doc:id="7bab70d4-c904-4aaf-9771-f9256c49867d" config-ref="HTTP_Listener_config" path="${folding-at-home.http-request.inner.donors-listener}"/>
-		<logger level="INFO" doc:name="Logger" doc:id="b898ca86-2bd6-43b0-a3ae-16cbc820fddc" />
+		<flow-ref doc:name="get-donors-txt-file" doc:id="a20daa2e-822b-4283-a1d1-8b4bb121f092" name="get-donors-txt-file"/>
+		<flow-ref doc:name="store-date-donors-from-header-of-the-file" doc:id="18604123-f0ff-471f-aa71-d168c481911c" name="store-date-donors-from-header-of-the-file"/>
+		<flow-ref doc:name="get-donors-fulldate-from-object-store" doc:id="8aa48483-0664-497b-b874-8d3e92dae321" name="get-donors-fulldate-from-object-store"/>
+		<choice doc:name="Choice" doc:id="e10dae33-c60d-4310-b904-200b6bafa00c" >
+			<when expression="#[vars.fulldate_donors[0].date == vars.os_fulldate_donors]">
+				<logger level="INFO" doc:name="Logger" doc:id="91f04df0-521e-452a-b4ab-000ccde2f5cd" message='#["All donors are already up-to-date"]'/>
+			</when>
+			<otherwise >
+				<flow-ref doc:name="processing-donors-txt-file-and-send-each-donor-object-to-activemq" doc:id="b70caeba-7a30-4624-9532-92fa0fc0c48a" name="processing-donors-txt-file-and-send-each-donor-object-to-activemq" />
+				<logger level="INFO" doc:name="Logger" doc:id="420a1fef-481b-4f09-8ae3-1d0ece2474b3" message="All donors are successfully sent to ActiveMQ"/>
+			</otherwise>
+		</choice>
+	</flow>
+	<flow name="processing-donors-txt-file-and-send-each-donor-object-to-activemq" doc:id="61a0ceb1-eca7-4828-91eb-4d124d03ad2a" >
+		<process-huge-file:process-the-input-file doc:name="Process the input file" doc:id="19ed4af1-80cb-4583-ad88-5844424a052e" />
+	</flow>
+	<flow name="get-donors-txt-file" doc:id="f8a87ea0-c026-4ba3-8abe-3c49010c2ed7" >
+		<http:request method="GET" doc:name="GET /daily_user_summary.txt" doc:id="702ad235-2cf8-4a25-8c4d-dafbd1d1e9a3" config-ref="HTTP_Request_configuration_FoldingAtHome" path="${folding-at-home.http-request.donors-txt-download-endpoint}" outputMimeType='application/csv; bodystartlinenumber=2; headerlinenumber=1; escape=""; streaming=true; header=false; separator="&#009;"' >
+			<ee:repeatable-file-store-stream inMemorySize="1" bufferUnit="GB" />
+		</http:request>
+	</flow>
+	<flow name="store-date-donors-from-header-of-the-file" doc:id="117147fa-92cb-49cb-bfd7-ccb25ea3c6ad" >
+		<ee:transform doc:name="vars.fulldate_donors" doc:id="6722d0bf-617e-4077-a608-2c081b28d93a" >
+			<ee:message />
+			<ee:variables >
+				<ee:set-variable variableName="fulldate_donors" ><![CDATA[%dw 2.0
+output application/json
+---
+payload[0] pluck (value, key, index) -> {
+  "date": value
+}]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+	</flow>
+	<flow name="get-donors-fulldate-from-object-store" doc:id="61e22510-667f-45f9-995d-10c1e7e7af3a" >
+		<os:retrieve doc:name="os_fulldate_donors" doc:id="103f0e4a-c053-41ad-8a63-50ff1d2e1615" key="os_fulldate_donors" target="os_fulldate_donors" objectStore="Object_store">
+			<os:default-value ><![CDATA[-1]]></os:default-value>
+		</os:retrieve>
+	</flow>
+	<flow name="store-donors-fulldate-into-object-store" doc:id="35dd08e6-bd64-4e3a-9407-973db27562c8" >
+		<os:store doc:name="os_fulldate_donors" doc:id="d10bdae6-e761-417c-85e9-a03a83faab64" key="os_fulldate_donors" objectStore="Object_store">
+			<os:value ><![CDATA[#[vars.fulldate_donors[0].date]]]></os:value>
+		</os:store>
 	</flow>
 </mule>
